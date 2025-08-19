@@ -1,6 +1,7 @@
 import time
 import json
 import re
+import os
 from urllib.parse import urljoin, urlparse
 from datetime import datetime
 import random
@@ -68,6 +69,9 @@ def setup_chrome_driver_headless():
     """Configura o driver do Chrome em modo headless"""
     chrome_options = Options()
     
+    # Gerar diretório único para esta instância
+    unique_dir = f"/tmp/chrome-{int(time.time())}-{os.getpid()}"
+    
     # Configurações básicas e essenciais
     chrome_options.add_argument('--headless')
     chrome_options.add_argument('--no-sandbox')
@@ -106,6 +110,11 @@ def setup_chrome_driver_headless():
     chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
     chrome_options.add_experimental_option('useAutomationExtension', False)
     
+    # Diretório único para esta instância
+    chrome_options.add_argument(f'--user-data-dir={unique_dir}')
+    chrome_options.add_argument(f'--data-path={unique_dir}')
+    chrome_options.add_argument(f'--disk-cache-dir={unique_dir}/cache')
+    
     try:
         driver = webdriver.Chrome(options=chrome_options)
         driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
@@ -119,6 +128,9 @@ def setup_chrome_driver_fallback():
     try:
         print("Tentando configuração alternativa do Chrome...")
         chrome_options = Options()
+        
+        # Gerar diretório único para esta instância
+        unique_dir = f"/tmp/chrome-alt-{int(time.time())}-{os.getpid()}"
         
         # Configurações mínimas e essenciais - SEM diretórios de usuário
         chrome_options.add_argument('--headless')
@@ -148,6 +160,11 @@ def setup_chrome_driver_fallback():
         # User agent simples
         chrome_options.add_argument('--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
         
+        # Diretório único para esta instância
+        chrome_options.add_argument(f'--user-data-dir={unique_dir}')
+        chrome_options.add_argument(f'--data-path={unique_dir}')
+        chrome_options.add_argument(f'--disk-cache-dir={unique_dir}/cache')
+        
         driver = webdriver.Chrome(options=chrome_options)
         driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
         print("Configuração alternativa do Chrome bem-sucedida!")
@@ -163,6 +180,9 @@ def setup_chrome_driver_ultra_simple():
         print("Tentando configuração ultra-simples do Chrome...")
         chrome_options = Options()
         
+        # Gerar diretório único para esta instância
+        unique_dir = f"/tmp/chrome-ultra-{int(time.time())}-{os.getpid()}"
+        
         # Apenas o essencial - nada mais
         chrome_options.add_argument('--headless')
         chrome_options.add_argument('--no-sandbox')
@@ -173,6 +193,10 @@ def setup_chrome_driver_ultra_simple():
         
         # User agent básico
         chrome_options.add_argument('--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36')
+        
+        # Diretório único para esta instância
+        chrome_options.add_argument(f'--user-data-dir={unique_dir}')
+        chrome_options.add_argument(f'--data-path={unique_dir}')
         
         driver = webdriver.Chrome(options=chrome_options)
         print("Configuração ultra-simples do Chrome bem-sucedida!")
