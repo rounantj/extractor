@@ -43,9 +43,12 @@ def setup_chrome_driver_with_retry(max_retries=3):
             if attempt == 0:
                 # Primeira tentativa: configuração padrão
                 driver = setup_chrome_driver_headless()
-            else:
-                # Tentativas subsequentes: configuração alternativa
+            elif attempt == 1:
+                # Segunda tentativa: configuração alternativa
                 driver = setup_chrome_driver_fallback()
+            else:
+                # Terceira tentativa: configuração ultra-simples
+                driver = setup_chrome_driver_ultra_simple()
             
             if driver:
                 print(f"✅ Chrome configurado com sucesso na tentativa {attempt + 1}")
@@ -65,24 +68,17 @@ def setup_chrome_driver_headless():
     """Configura o driver do Chrome em modo headless"""
     chrome_options = Options()
     
-    # Configurações para navegador headless
+    # Configurações básicas e essenciais
     chrome_options.add_argument('--headless')
     chrome_options.add_argument('--no-sandbox')
     chrome_options.add_argument('--disable-dev-shm-usage')
-    chrome_options.add_argument('--disable-blink-features=AutomationControlled')
     chrome_options.add_argument('--disable-gpu')
-    chrome_options.add_argument('--window-size=1920,1080')
-    chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-    chrome_options.add_experimental_option('useAutomationExtension', False)
-    
-    # Configurações específicas para Heroku/Produção
     chrome_options.add_argument('--disable-extensions')
     chrome_options.add_argument('--disable-plugins')
-    chrome_options.add_argument('--disable-images')
     chrome_options.add_argument('--disable-web-security')
     chrome_options.add_argument('--allow-running-insecure-content')
     
-    # Configurações críticas para Heroku - evitar problemas de diretório de usuário
+    # Configurações críticas para Heroku - SEM diretórios de usuário
     chrome_options.add_argument('--no-first-run')
     chrome_options.add_argument('--no-default-browser-check')
     chrome_options.add_argument('--disable-background-timer-checking')
@@ -91,17 +87,24 @@ def setup_chrome_driver_headless():
     chrome_options.add_argument('--disable-features=TranslateUI')
     chrome_options.add_argument('--disable-ipc-flooding-protection')
     
-    # Configurações de memória e performance para Heroku
+    # Configurações de memória e performance
     chrome_options.add_argument('--memory-pressure-off')
-    chrome_options.add_argument('--max_old_space_size=4096')
     chrome_options.add_argument('--disable-background-networking')
     chrome_options.add_argument('--disable-default-apps')
     chrome_options.add_argument('--disable-sync')
     chrome_options.add_argument('--metrics-recording-only')
     chrome_options.add_argument('--no-report-upload')
     
-    # User agent para desktop
-    chrome_options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
+    # Configurações de janela
+    chrome_options.add_argument('--window-size=1920,1080')
+    chrome_options.add_argument('--start-maximized')
+    
+    # User agent
+    chrome_options.add_argument('--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
+    
+    # Configurações experimentais
+    chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    chrome_options.add_experimental_option('useAutomationExtension', False)
     
     try:
         driver = webdriver.Chrome(options=chrome_options)
@@ -109,8 +112,7 @@ def setup_chrome_driver_headless():
         return driver
     except Exception as e:
         print(f"Erro ao configurar Chrome headless: {e}")
-        # Tentar configuração alternativa mais robusta
-        return setup_chrome_driver_fallback()
+        return None
 
 def setup_chrome_driver_fallback():
     """Configuração alternativa do Chrome para casos de erro no Heroku"""
@@ -118,7 +120,7 @@ def setup_chrome_driver_fallback():
         print("Tentando configuração alternativa do Chrome...")
         chrome_options = Options()
         
-        # Configurações mínimas e essenciais
+        # Configurações mínimas e essenciais - SEM diretórios de usuário
         chrome_options.add_argument('--headless')
         chrome_options.add_argument('--no-sandbox')
         chrome_options.add_argument('--disable-dev-shm-usage')
@@ -140,11 +142,8 @@ def setup_chrome_driver_fallback():
         chrome_options.add_argument('--metrics-recording-only')
         chrome_options.add_argument('--no-report-upload')
         
-        # Configurações específicas para evitar problemas de diretório
-        chrome_options.add_argument('--user-data-dir=/tmp/chrome-data')
-        chrome_options.add_argument('--data-path=/tmp/chrome-data')
-        chrome_options.add_argument('--homedir=/tmp')
-        chrome_options.add_argument('--disk-cache-dir=/tmp/chrome-cache')
+        # Configurações de janela
+        chrome_options.add_argument('--window-size=1366,768')
         
         # User agent simples
         chrome_options.add_argument('--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
@@ -156,6 +155,31 @@ def setup_chrome_driver_fallback():
         
     except Exception as e:
         print(f"Erro na configuração alternativa do Chrome: {e}")
+        return setup_chrome_driver_ultra_simple()
+
+def setup_chrome_driver_ultra_simple():
+    """Configuração ultra-simples do Chrome - última tentativa"""
+    try:
+        print("Tentando configuração ultra-simples do Chrome...")
+        chrome_options = Options()
+        
+        # Apenas o essencial - nada mais
+        chrome_options.add_argument('--headless')
+        chrome_options.add_argument('--no-sandbox')
+        chrome_options.add_argument('--disable-dev-shm-usage')
+        chrome_options.add_argument('--disable-gpu')
+        chrome_options.add_argument('--no-first-run')
+        chrome_options.add_argument('--no-default-browser-check')
+        
+        # User agent básico
+        chrome_options.add_argument('--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36')
+        
+        driver = webdriver.Chrome(options=chrome_options)
+        print("Configuração ultra-simples do Chrome bem-sucedida!")
+        return driver
+        
+    except Exception as e:
+        print(f"Erro na configuração ultra-simples do Chrome: {e}")
         return None
 
 def wait_for_page_load(driver, timeout=30):
