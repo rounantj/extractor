@@ -34,6 +34,33 @@ def detect_store_from_url(url):
     else:
         return 'Generic'
 
+def setup_chrome_driver_with_retry(max_retries=3):
+    """Tenta configurar o Chrome com múltiplas tentativas"""
+    for attempt in range(max_retries):
+        try:
+            print(f"🔄 Tentativa {attempt + 1} de {max_retries} para configurar Chrome...")
+            
+            if attempt == 0:
+                # Primeira tentativa: configuração padrão
+                driver = setup_chrome_driver_headless()
+            else:
+                # Tentativas subsequentes: configuração alternativa
+                driver = setup_chrome_driver_fallback()
+            
+            if driver:
+                print(f"✅ Chrome configurado com sucesso na tentativa {attempt + 1}")
+                return driver
+                
+        except Exception as e:
+            print(f"❌ Tentativa {attempt + 1} falhou: {e}")
+            if attempt < max_retries - 1:
+                print(f"⏳ Aguardando 2 segundos antes da próxima tentativa...")
+                time.sleep(2)
+            else:
+                print(f"❌ Todas as {max_retries} tentativas falharam")
+    
+    return None
+
 def setup_chrome_driver_headless():
     """Configura o driver do Chrome em modo headless"""
     chrome_options = Options()
@@ -48,15 +75,33 @@ def setup_chrome_driver_headless():
     chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
     chrome_options.add_experimental_option('useAutomationExtension', False)
     
-    # User agent para desktop
-    chrome_options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
-    
-    # Configurações adicionais para headless
+    # Configurações específicas para Heroku/Produção
     chrome_options.add_argument('--disable-extensions')
     chrome_options.add_argument('--disable-plugins')
     chrome_options.add_argument('--disable-images')
     chrome_options.add_argument('--disable-web-security')
     chrome_options.add_argument('--allow-running-insecure-content')
+    
+    # Configurações críticas para Heroku - evitar problemas de diretório de usuário
+    chrome_options.add_argument('--no-first-run')
+    chrome_options.add_argument('--no-default-browser-check')
+    chrome_options.add_argument('--disable-background-timer-checking')
+    chrome_options.add_argument('--disable-backgrounding-occluded-windows')
+    chrome_options.add_argument('--disable-renderer-backgrounding')
+    chrome_options.add_argument('--disable-features=TranslateUI')
+    chrome_options.add_argument('--disable-ipc-flooding-protection')
+    
+    # Configurações de memória e performance para Heroku
+    chrome_options.add_argument('--memory-pressure-off')
+    chrome_options.add_argument('--max_old_space_size=4096')
+    chrome_options.add_argument('--disable-background-networking')
+    chrome_options.add_argument('--disable-default-apps')
+    chrome_options.add_argument('--disable-sync')
+    chrome_options.add_argument('--metrics-recording-only')
+    chrome_options.add_argument('--no-report-upload')
+    
+    # User agent para desktop
+    chrome_options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
     
     try:
         driver = webdriver.Chrome(options=chrome_options)
@@ -64,6 +109,53 @@ def setup_chrome_driver_headless():
         return driver
     except Exception as e:
         print(f"Erro ao configurar Chrome headless: {e}")
+        # Tentar configuração alternativa mais robusta
+        return setup_chrome_driver_fallback()
+
+def setup_chrome_driver_fallback():
+    """Configuração alternativa do Chrome para casos de erro no Heroku"""
+    try:
+        print("Tentando configuração alternativa do Chrome...")
+        chrome_options = Options()
+        
+        # Configurações mínimas e essenciais
+        chrome_options.add_argument('--headless')
+        chrome_options.add_argument('--no-sandbox')
+        chrome_options.add_argument('--disable-dev-shm-usage')
+        chrome_options.add_argument('--disable-gpu')
+        chrome_options.add_argument('--disable-extensions')
+        chrome_options.add_argument('--disable-plugins')
+        chrome_options.add_argument('--disable-web-security')
+        chrome_options.add_argument('--no-first-run')
+        chrome_options.add_argument('--no-default-browser-check')
+        chrome_options.add_argument('--disable-background-timer-checking')
+        chrome_options.add_argument('--disable-backgrounding-occluded-windows')
+        chrome_options.add_argument('--disable-renderer-backgrounding')
+        chrome_options.add_argument('--disable-features=TranslateUI')
+        chrome_options.add_argument('--disable-ipc-flooding-protection')
+        chrome_options.add_argument('--memory-pressure-off')
+        chrome_options.add_argument('--disable-background-networking')
+        chrome_options.add_argument('--disable-default-apps')
+        chrome_options.add_argument('--disable-sync')
+        chrome_options.add_argument('--metrics-recording-only')
+        chrome_options.add_argument('--no-report-upload')
+        
+        # Configurações específicas para evitar problemas de diretório
+        chrome_options.add_argument('--user-data-dir=/tmp/chrome-data')
+        chrome_options.add_argument('--data-path=/tmp/chrome-data')
+        chrome_options.add_argument('--homedir=/tmp')
+        chrome_options.add_argument('--disk-cache-dir=/tmp/chrome-cache')
+        
+        # User agent simples
+        chrome_options.add_argument('--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
+        
+        driver = webdriver.Chrome(options=chrome_options)
+        driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+        print("Configuração alternativa do Chrome bem-sucedida!")
+        return driver
+        
+    except Exception as e:
+        print(f"Erro na configuração alternativa do Chrome: {e}")
         return None
 
 def wait_for_page_load(driver, timeout=30):
@@ -203,19 +295,20 @@ def extract_images_with_selenium(url, store_name):
     try:
         print(f"Acessando {store_name} com Selenium headless...")
         
-        driver = setup_chrome_driver_headless()
+        driver = setup_chrome_driver_with_retry()
         if not driver:
+            print("❌ Falha ao configurar o driver do Chrome")
             return []
         
         print("Navegando para a URL...")
         driver.get(url)
         
         if not wait_for_page_load(driver):
-            print("Página não carregou completamente")
+            print("⚠️ Página não carregou completamente, mas continuando...")
         
         print("Aguardando carregamento de imagens...")
         if not wait_for_images_to_load(driver):
-            print("Imagens não carregaram completamente")
+            print("⚠️ Imagens não carregaram completamente, mas continuando...")
         
         images_found = []
         
@@ -261,17 +354,22 @@ def extract_images_with_selenium(url, store_name):
             except Exception as e:
                 continue
         
+        print(f"✅ Total de imagens encontradas: {len(images_found)}")
         return images_found
         
     except Exception as e:
-        print(f"Erro: {str(e)}")
+        print(f"❌ Erro durante a extração: {str(e)}")
+        print(f"Stack trace: {e.__class__.__name__}")
         return []
     
     finally:
         if driver:
             try:
+                print("🔄 Fechando driver do Chrome...")
                 driver.quit()
-            except:
+                print("✅ Driver fechado com sucesso")
+            except Exception as e:
+                print(f"⚠️ Erro ao fechar driver: {e}")
                 pass
 
 def create_image_info(src, element, store_name):
