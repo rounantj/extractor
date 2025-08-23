@@ -114,9 +114,9 @@ def cleanup_chrome_temp_dir(temp_dir):
             print(f"⚠️ Erro ao limpar diretório: {e}")
 
 def extract_images_with_requests(url, store_name):
-    """Fallback: Extrai imagens usando requests + BeautifulSoup"""
+    """SOLUÇÃO PRINCIPAL: Extrai imagens usando requests + BeautifulSoup com filtros flexíveis"""
     try:
-        print(f"🔄 Fallback: Extraindo com requests + BeautifulSoup para {store_name}")
+        print(f"🔄 Extraindo com requests + BeautifulSoup para {store_name}")
         
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -134,14 +134,14 @@ def extract_images_with_requests(url, store_name):
         soup = BeautifulSoup(response.content, 'html.parser')
         images_found = []
         
-        # Buscar imagens <img>
+        # Buscar imagens <img> com filtros FLEXÍVEIS
         img_elements = soup.find_all('img')
         print(f"📸 Encontradas {len(img_elements)} imagens <img> via requests")
         
         for img in img_elements:
             try:
                 src = img.get('src') or img.get('data-src') or img.get('data-lazy-src') or img.get('data-original')
-                if src and is_main_product_image(src, img, store_name):
+                if src and is_main_product_image_flexible(src, img, store_name):
                     # Converter para URL absoluta se necessário
                     if src.startswith('//'):
                         src = 'https:' + src
@@ -162,7 +162,7 @@ def extract_images_with_requests(url, store_name):
         for meta in meta_images:
             try:
                 content = meta.get('content')
-                if content and is_main_product_image(content, meta, store_name):
+                if content and is_main_product_image_flexible(content, meta, store_name):
                     if content.startswith('//'):
                         content = 'https:' + content
                     elif content.startswith('/'):
@@ -175,12 +175,137 @@ def extract_images_with_requests(url, store_name):
             except Exception as e:
                 continue
         
+        # Buscar imagens em CSS (background-image)
+        print("🔍 Buscando imagens em CSS...")
+        style_elements = soup.find_all('style')
+        for style in style_elements:
+            if style.string:
+                # Extrair URLs de background-image
+                background_images = re.findall(r'background-image:\s*url\(["\']?([^"\')\s]+)["\']?\)', style.string)
+                for bg_img in background_images:
+                    if bg_img and is_main_product_image_flexible(bg_img, style, store_name):
+                        if bg_img.startswith('//'):
+                            bg_img = 'https:' + bg_img
+                        elif bg_img.startswith('/'):
+                            bg_img = urljoin(url, bg_img)
+                        elif not bg_img.startswith('http'):
+                            bg_img = urljoin(url, bg_img)
+                        
+                        image_info = create_image_info(bg_img, style, store_name)
+                        images_found.append(image_info)
+        
         print(f"✅ Total de imagens encontradas via requests: {len(images_found)}")
         return images_found
         
     except Exception as e:
-        print(f"❌ Erro no fallback com requests: {str(e)}")
+        print(f"❌ Erro no requests: {str(e)}")
         return []
+
+def is_main_product_image_flexible(src, element, store_name):
+    """Filtro FLEXÍVEL para imagens principais de produto"""
+    if not src:
+        return False
+    
+    src_lower = src.lower()
+    
+    # Verificar se é uma URL válida (http/https)
+    if not src.startswith(('http://', 'https://')):
+        return False
+    
+    # Padrões específicos para cada loja (MAIS FLEXÍVEIS)
+    store_patterns = {
+        'Amazon': [
+            'images-na.ssl-images-amazon.com/images/',
+            'images.amazon.com/images/',
+            'm.media-amazon.com/images/',
+            'product', 'prod', 'amazon'
+        ],
+        'Mercado Livre': [
+            'http2.mlstatic.com/',
+            'http2.mlstatic.com/D_',
+            'mlstatic.com/',
+            'product', 'produto', 'mercadolivre'
+        ],
+        'AliExpress': [
+            'ae01.alicdn.com/kf/',
+            'ae02.alicdn.com/kf/',
+            'ae03.alicdn.com/kf/',
+            'ae04.alicdn.com/kf/',
+            'product', 'prod', 'item', 'aliexpress'
+        ],
+        'Americanas': [
+            'americanas.vtexassets.com/arquivos/ids/',
+            'vtexassets.com/arquivos/ids/',
+            'product', 'produto', 'americanas'
+        ],
+        'Casas Bahia': [
+            'casasbahia.com.br/arquivos/ids/',
+            'vtexassets.com/arquivos/ids/',
+            'product', 'produto', 'casasbahia'
+        ],
+        'Shopee': [
+            'shopee.com.br/arquivos/',
+            'shopee.com.br/images/',
+            'product', 'produto', 'shopee'
+        ],
+        'Shein': [
+            'img.ltwebstatic.com/images3_ccc/',
+            'sheinm.ltwebstatic.com/pwa_dist/images/',
+            'product', 'produto', 'shein'
+        ],
+        'Kabum': [
+            'images.kabum.com.br/produtos/fotos/',
+            'kabum.com.br/produtos/fotos/',
+            'kabum.com.br',
+            'product', 'produto', 'kabum'
+        ]
+    }
+    
+    # Padrões de EXCLUSÃO MENOS RIGOROSOS
+    exclude_patterns = [
+        'logo', 'icon', 'sprite', 'banner', 'ad', 'social',
+        'favicon', 'avatar', 'profile', 'thumb', 'small',
+        'transparent-pixel', 'grey-pixel', 'swatch-image',
+        'cr-lightbox', 'review-image', 'community-reviews',
+        'attach-accessory', 'button-icon', 'media-cheveron',
+        'loading', 'placeholder', 'no-image', 'blank',
+        'star', 'rating', 'review', 'coupon', 'discount',
+        'arrow', 'chevron', 'close', 'menu', 'hamburger',
+        'search', 'filter', 'sort', 'pagination',
+        'vlibras', 'accessibility', 'a11y', 'libras'
+    ]
+    
+    # Verificar exclusões (menos rigoroso)
+    for pattern in exclude_patterns:
+        if pattern in src_lower:
+            return False
+    
+    # Verificar se é uma imagem muito pequena (provavelmente ícone)
+    if any(size in src_lower for size in ['16x16', '24x24', '32x32', '48x48', '64x64']):
+        return False
+    
+    # Verificar padrões da loja específica (MAIS FLEXÍVEL)
+    patterns = store_patterns.get(store_name, [])
+    for pattern in patterns:
+        if pattern in src_lower:
+            return True
+    
+    # Verificar extensões de imagem válidas
+    if not any(src_lower.endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.webp']):
+        return False
+    
+    # Verificar se parece uma URL de produto (MAIS FLEXÍVEL)
+    if 'http' in src_lower:
+        # Aceitar mais padrões
+        product_indicators = ['product', 'prod', 'item', 'image', 'photo', 'pic', 'gallery', 'foto', 'imagem']
+        if any(indicator in src_lower for indicator in product_indicators):
+            return True
+        
+        # Para Kabum, aceitar URLs que contenham números (IDs de produto)
+        if store_name == 'Kabum' and re.search(r'\d+', src_lower):
+            return True
+    
+    return True
 
 def extract_images_with_selenium(url, store_name):
     """Extrai imagens usando Selenium - versão otimizada para Heroku"""
@@ -210,7 +335,7 @@ def extract_images_with_selenium(url, store_name):
         for img in img_elements:
             try:
                 src = img.get_attribute('src')
-                if src and is_main_product_image(src, img, store_name):
+                if src and is_main_product_image_flexible(src, img, store_name):
                     image_info = create_image_info(src, img, store_name)
                     images_found.append(image_info)
             except Exception as e:
@@ -224,7 +349,7 @@ def extract_images_with_selenium(url, store_name):
         for img in lazy_images:
             try:
                 src = img.get_attribute('data-src') or img.get_attribute('data-lazy-src') or img.get_attribute('data-original')
-                if src and is_main_product_image(src, img, store_name):
+                if src and is_main_product_image_flexible(src, img, store_name):
                     image_info = create_image_info(src, img, store_name)
                     images_found.append(image_info)
             except Exception as e:
@@ -238,7 +363,7 @@ def extract_images_with_selenium(url, store_name):
         for meta in meta_images:
             try:
                 content = meta.get_attribute('content')
-                if content and is_main_product_image(content, meta, store_name):
+                if content and is_main_product_image_flexible(content, meta, store_name):
                     image_info = create_image_info(content, meta, store_name)
                     images_found.append(image_info)
             except Exception as e:
@@ -265,104 +390,8 @@ def extract_images_with_selenium(url, store_name):
             cleanup_chrome_temp_dir(temp_dir)
 
 def is_main_product_image(src, element, store_name):
-    """Filtro rigoroso para imagens principais de produto"""
-    if not src:
-        return False
-    
-    src_lower = src.lower()
-    
-    # Verificar se é uma URL válida (http/https)
-    if not src.startswith(('http://', 'https://')):
-        return False
-    
-    # Padrões específicos para cada loja
-    store_patterns = {
-        'Amazon': [
-            'images-na.ssl-images-amazon.com/images/',
-            'images.amazon.com/images/',
-            'm.media-amazon.com/images/',
-            'product', 'prod'
-        ],
-        'Mercado Livre': [
-            'http2.mlstatic.com/',
-            'http2.mlstatic.com/D_',
-            'mlstatic.com/',
-            'product', 'produto'
-        ],
-        'AliExpress': [
-            'ae01.alicdn.com/kf/',
-            'ae02.alicdn.com/kf/',
-            'ae03.alicdn.com/kf/',
-            'ae04.alicdn.com/kf/',
-            'product', 'prod', 'item'
-        ],
-        'Americanas': [
-            'americanas.vtexassets.com/arquivos/ids/',
-            'vtexassets.com/arquivos/ids/',
-            'product', 'produto'
-        ],
-        'Casas Bahia': [
-            'casasbahia.com.br/arquivos/ids/',
-            'vtexassets.com/arquivos/ids/',
-            'product', 'produto'
-        ],
-        'Shopee': [
-            'shopee.com.br/arquivos/',
-            'shopee.com.br/images/',
-            'product', 'produto'
-        ],
-        'Shein': [
-            'img.ltwebstatic.com/images3_ccc/',
-            'sheinm.ltwebstatic.com/pwa_dist/images/',
-            'product', 'produto'
-        ],
-        'Kabum': [
-            'images.kabum.com.br/produtos/fotos/',
-            'kabum.com.br/produtos/fotos/',
-            'product', 'produto'
-        ]
-    }
-    
-    # Padrões de EXCLUSÃO rigorosos
-    exclude_patterns = [
-        'logo', 'icon', 'sprite', 'banner', 'ad', 'social',
-        'favicon', 'avatar', 'profile', 'thumb', 'small',
-        'transparent-pixel', 'grey-pixel', 'swatch-image',
-        'cr-lightbox', 'review-image', 'community-reviews',
-        'attach-accessory', 'button-icon', 'media-cheveron',
-        'loading', 'placeholder', 'no-image', 'blank',
-        'star', 'rating', 'review', 'coupon', 'discount',
-        'arrow', 'chevron', 'close', 'menu', 'hamburger',
-        'search', 'filter', 'sort', 'pagination',
-        'vlibras', 'accessibility', 'a11y', 'libras'
-    ]
-    
-    # Verificar exclusões primeiro
-    for pattern in exclude_patterns:
-        if pattern in src_lower:
-            return False
-    
-    # Verificar se é uma imagem muito pequena (provavelmente ícone)
-    if any(size in src_lower for size in ['16x16', '24x24', '32x32', '48x48', '64x64']):
-        return False
-    
-    # Verificar padrões da loja específica
-    patterns = store_patterns.get(store_name, [])
-    for pattern in patterns:
-        if pattern in src_lower:
-            return True
-    
-    # Verificar extensões de imagem válidas
-    if not any(src_lower.endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.webp']):
-        return False
-    
-    # Verificar se parece uma URL de produto (não muito genérica)
-    if 'http' in src_lower:
-        product_indicators = ['product', 'prod', 'item', 'image', 'photo', 'pic', 'gallery']
-        if not any(indicator in src_lower for indicator in product_indicators):
-            return False
-    
-    return True
+    """Filtro rigoroso para imagens principais de produto (mantido para compatibilidade)"""
+    return is_main_product_image_flexible(src, element, store_name)
 
 def get_image_dimensions(url):
     """Obtém o tamanho real da imagem via HEAD request"""
@@ -508,6 +537,8 @@ def calculate_quality_score(image_info, store_name):
     elif store_name == 'Kabum':
         if 'images.kabum.com.br/produtos/fotos/' in url:
             score += 30
+        if 'kabum.com.br' in url:
+            score += 25
         if 'product' in url:
             score += 25
     
@@ -550,10 +581,45 @@ def extract_product_images(url, store_name=None):
         
         print(f"Iniciando extração para {store_name}: {url}")
         
+        # Estratégia ESPECIAL para Kabum (sem Chrome)
+        if store_name == 'Kabum':
+            print("🎯 Usando extrator específico do Kabum...")
+            from kabum_extractor import extract_kabum_images, calculate_kabum_quality_score
+            
+            images = extract_kabum_images(url)
+            if images:
+                # Calcular scores específicos do Kabum
+                for img in images:
+                    img['quality_score'] = calculate_kabum_quality_score(img)
+                
+                # Ordenar por qualidade
+                images.sort(key=lambda x: x['quality_score'], reverse=True)
+                
+                # Remover duplicatas
+                unique_images = []
+                seen_urls = set()
+                
+                for img in images:
+                    base_url = get_base_image_url(img['url'])
+                    if base_url not in seen_urls:
+                        seen_urls.add(base_url)
+                        unique_images.append(img)
+                
+                print(f"✅ Kabum: {len(unique_images)} imagens únicas encontradas")
+                
+                return {
+                    'store_name': store_name,
+                    'url': url,
+                    'extraction_date': datetime.now().isoformat(),
+                    'total_images_found': len(unique_images),
+                    'extraction_method': 'kabum_specific_extractor',
+                    'images': unique_images
+                }
+        
         # Estratégia 1: Tentar Selenium primeiro (mais robusto)
         images = extract_images_with_selenium(url, store_name)
         
-        # Estratégia 2: Se Selenium falhar, usar requests + BeautifulSoup
+        # Estratégia 2: Se Selenium falhar, usar requests + BeautifulSoup (MAIS FLEXÍVEL)
         if not images:
             print("🔄 Selenium falhou, tentando fallback com requests...")
             images = extract_images_with_requests(url, store_name)
