@@ -41,26 +41,77 @@ def detect_store_from_url(url):
         return 'Generic'
 
 def setup_chrome_driver_heroku():
-    """Configuração otimizada do Chrome para Heroku - SEM user-data-dir"""
+    """Configuração do Chrome baseada em soluções comprovadas do Heroku"""
     try:
-        # Importar configurações específicas do Heroku
-        from chrome_config import get_chrome_options_heroku, cleanup_chrome_temp_files
+        chrome_options = Options()
         
-        # Limpar arquivos temporários antes de iniciar
-        cleanup_chrome_temp_files()
+        # SOLUÇÃO COMPROVADA: Configurações mínimas que funcionam no Heroku
+        chrome_options.add_argument('--headless')
+        chrome_options.add_argument('--no-sandbox')
+        chrome_options.add_argument('--disable-dev-shm-usage')
+        chrome_options.add_argument('--disable-gpu')
         
-        # Obter opções otimizadas
-        chrome_options = get_chrome_options_heroku()
+        # SOLUÇÃO COMPROVADA: Usar diretório temporário único e limpo
+        temp_dir = f"/tmp/chrome-{os.getpid()}-{int(time.time())}"
+        os.makedirs(temp_dir, exist_ok=True)
+        
+        chrome_options.add_argument(f'--user-data-dir={temp_dir}')
+        chrome_options.add_argument(f'--data-path={temp_dir}')
+        chrome_options.add_argument(f'--homedir={temp_dir}')
+        chrome_options.add_argument(f'--disk-cache-dir={temp_dir}/cache')
+        
+        # SOLUÇÃO COMPROVADA: Configurações de isolamento
+        chrome_options.add_argument('--single-process')
+        chrome_options.add_argument('--no-zygote')
+        chrome_options.add_argument('--disable-setuid-sandbox')
+        
+        # SOLUÇÃO COMPROVADA: Configurações de memória
+        chrome_options.add_argument('--memory-pressure-off')
+        chrome_options.add_argument('--max_old_space_size=4096')
+        
+        # SOLUÇÃO COMPROVADA: Configurações de rede
+        chrome_options.add_argument('--disable-background-networking')
+        chrome_options.add_argument('--disable-default-apps')
+        chrome_options.add_argument('--disable-sync')
+        chrome_options.add_argument('--metrics-recording-only')
+        chrome_options.add_argument('--no-report-upload')
+        
+        # SOLUÇÃO COMPROVADA: Configurações de janela
+        chrome_options.add_argument('--window-size=1366,768')
+        chrome_options.add_argument('--start-maximized')
+        
+        # SOLUÇÃO COMPROVADA: User agent realista
+        chrome_options.add_argument('--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
+        
+        # SOLUÇÃO COMPROVADA: Configurações experimentais
+        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        chrome_options.add_experimental_option('useAutomationExtension', False)
+        
+        # SOLUÇÃO COMPROVADA: Configurações de segurança
+        chrome_options.add_argument('--disable-web-security')
+        chrome_options.add_argument('--allow-running-insecure-content')
+        chrome_options.add_argument('--disable-features=VizDisplayCompositor')
+        
+        print(f"🔧 Configurando Chrome com diretório temporário: {temp_dir}")
         
         driver = webdriver.Chrome(options=chrome_options)
         driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
         
         print("✅ Chrome configurado com sucesso para Heroku")
-        return driver
+        return driver, temp_dir
         
     except Exception as e:
         print(f"❌ Erro ao configurar Chrome para Heroku: {e}")
-        return None
+        return None, None
+
+def cleanup_chrome_temp_dir(temp_dir):
+    """Limpa o diretório temporário do Chrome"""
+    if temp_dir and os.path.exists(temp_dir):
+        try:
+            shutil.rmtree(temp_dir)
+            print(f"🧹 Diretório temporário limpo: {temp_dir}")
+        except Exception as e:
+            print(f"⚠️ Erro ao limpar diretório: {e}")
 
 def extract_images_with_requests(url, store_name):
     """Fallback: Extrai imagens usando requests + BeautifulSoup"""
@@ -134,10 +185,11 @@ def extract_images_with_requests(url, store_name):
 def extract_images_with_selenium(url, store_name):
     """Extrai imagens usando Selenium - versão otimizada para Heroku"""
     driver = None
+    temp_dir = None
     try:
         print(f"🚀 Tentando extração com Selenium para {store_name}...")
         
-        driver = setup_chrome_driver_heroku()
+        driver, temp_dir = setup_chrome_driver_heroku()
         if not driver:
             print("❌ Falha ao configurar Chrome, tentando fallback...")
             return None
@@ -207,6 +259,10 @@ def extract_images_with_selenium(url, store_name):
                 print("✅ Chrome fechado com sucesso")
             except Exception as e:
                 print(f"⚠️ Erro ao fechar Chrome: {e}")
+        
+        # Limpar diretório temporário
+        if temp_dir:
+            cleanup_chrome_temp_dir(temp_dir)
 
 def is_main_product_image(src, element, store_name):
     """Filtro rigoroso para imagens principais de produto"""
