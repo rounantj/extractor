@@ -4,3 +4,4 @@ selenium==4.35.0
 requests==2.31.0
 python-multipart==0.0.6
 pydantic==2.5.0
+beautifulsoup4==4.12.2

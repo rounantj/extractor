@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, HttpUrl
 from typing import List, Optional
 import uvicorn
+import requests
 from image_extractor import extract_product_images
 
 app = FastAPI(
@@ -13,6 +14,10 @@ app = FastAPI(
 class ExtractRequest(BaseModel):
     url: HttpUrl
     store_name: Optional[str] = None
+
+class SearchImagesRequest(BaseModel):
+    query: str
+    count: Optional[int] = 10
 
 class ImageInfo(BaseModel):
     url: str
@@ -29,6 +34,11 @@ class ExtractResponse(BaseModel):
     total_images_found: int
     top_15_images: List[ImageInfo]
     extraction_method: str
+
+class SearchImagesResponse(BaseModel):
+    images: List[str]
+    query: str
+    total_found: int
 
 @app.get("/")
 async def root():

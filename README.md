@@ -1,179 +1,129 @@
-# 🖼️ Extractor de Imagens de Produto
+# Image Extractor API
 
-API FastAPI para extrair as 15 melhores imagens de produtos de e-commerce usando Selenium headless.
+API para extrair imagens de produtos de e-commerce usando estratégia híbrida (Selenium + Requests).
 
-## 🚀 Funcionalidades
+## 🚀 Principais Melhorias para Heroku
 
-- ✅ **Detecção automática** de lojas (Amazon, Mercado Livre, AliExpress, etc.)
-- ✅ **Filtros inteligentes** para imagens de produto (remove ícones, logos, estrelas)
-- ✅ **Ordenação por qualidade** baseada em tamanho real e resolução
-- ✅ **Top 15 imagens** ordenadas da melhor para pior qualidade
-- ✅ **Modo headless** (sem interface gráfica) - perfeito para servidores
-- ✅ **Suporte a múltiplas lojas** com padrões específicos
+### ✅ Problemas Resolvidos
+- **Conflitos de diretório**: Removido `--user-data-dir` que causava erros no Heroku
+- **Estratégia de fallback**: Implementado sistema robusto com requests + BeautifulSoup
+- **Limpeza de recursos**: Chrome é fechado adequadamente após cada uso
+- **Configuração otimizada**: Chrome configurado especificamente para ambiente containerizado
 
-## 🛠️ Tecnologias
+### 🔧 Estratégia Híbrida
+1. **Primeira tentativa**: Selenium Chrome headless (mais robusto)
+2. **Fallback automático**: Requests + BeautifulSoup se Selenium falhar
+3. **Garantia de funcionamento**: Pelo menos uma estratégia sempre funcionará
 
-- **FastAPI** - Framework web moderno e rápido
-- **Selenium** - Automação de navegador headless
-- **Chrome WebDriver** - Navegador sem interface gráfica
-- **Pydantic** - Validação de dados
-- **Uvicorn** - Servidor ASGI
+### 📦 Dependências Atualizadas
+- `beautifulsoup4==4.12.2` - Para parsing HTML no fallback
+- `selenium==4.35.0` - Para navegação headless
+- `fastapi==0.104.1` - Framework da API
 
-## 📦 Instalação
+## 🏗️ Estrutura do Projeto
 
-### Local
-
-```bash
-# Instalar dependências
-pip install -r requirements.txt
-
-# Executar localmente
-python main.py
+```
+extractor/
+├── main.py                 # API FastAPI principal
+├── image_extractor.py      # Lógica de extração híbrida
+├── chrome_config.py        # Configurações específicas do Heroku
+├── start.sh               # Script de inicialização otimizado
+├── Procfile               # Configuração do Heroku
+├── requirements.txt       # Dependências Python
+└── runtime.txt            # Versão do Python
 ```
 
-### Heroku
-
-```bash
-# Fazer deploy
-heroku create seu-app-nome
-git add .
-git commit -m "Initial commit"
-git push heroku main
-```
-
-## 🎯 Uso da API
+## 🚀 Como Usar
 
 ### Endpoint Principal
-
-**POST** `/extract-images`
-
-### Exemplo de Request
-
-```json
+```bash
+POST /extract-images
 {
-  "url": "https://www.amazon.com.br/produto-exemplo",
-  "store_name": "Amazon" // Opcional - será detectado automaticamente
+    "url": "https://www.kabum.com.br/produto/...",
+    "store_name": "Kabum"  # opcional
 }
 ```
 
-### Exemplo de Response
-
+### Exemplo de Resposta
 ```json
 {
-  "store_name": "Amazon",
-  "url": "https://www.amazon.com.br/produto-exemplo",
-  "total_images_found": 25,
-  "top_15_images": [
-    {
-      "url": "https://m.media-amazon.com/images/I/81wQj-jVThL._AC_SX679_.jpg",
-      "alt": "Descrição da imagem",
-      "title": "",
-      "width": "651",
-      "height": "700",
-      "quality_score": 90.89,
-      "file_size_mb": 0.08
-    }
-  ],
-  "extraction_method": "selenium_headless_product_only"
+    "store_name": "Kabum",
+    "url": "https://www.kabum.com.br/produto/...",
+    "total_images_found": 15,
+    "top_15_images": [...],
+    "extraction_method": "selenium_headless"
 }
 ```
 
-## 🌐 Lojas Suportadas
-
-- **Amazon** - `amazon.com.br`, `amazon.com`
-- **Mercado Livre** - `mercadolivre.com.br`, `mlstatic.com`
-- **AliExpress** - `aliexpress.com`, `alicdn.com`
-- **Americanas** - `americanas.com.br`, `vtexassets.com`
-- **Casas Bahia** - `casasbahia.com.br`
-- **Shopee** - `shopee.com.br`
-- **Shein** - `shein.com`, `ltwebstatic.com`
-
-## 🔧 Configuração
+## 🔧 Configuração do Heroku
 
 ### Variáveis de Ambiente
-
-- `PORT` - Porta do servidor (Heroku define automaticamente)
-- `CHROME_BIN` - Caminho para o Chrome (opcional)
-
-### Configurações do Chrome
-
-O Chrome é configurado automaticamente para:
-
-- Modo headless (sem interface gráfica)
-- Anti-detecção de automação
-- User agent realista
-- Otimizações para servidor
-
-## 📊 Como Funciona
-
-1. **Recebe URL** do produto
-2. **Detecta automaticamente** a loja
-3. **Abre página** com Selenium headless
-4. **Aguarda carregamento** de JavaScript
-5. **Extrai imagens** com filtros rigorosos
-6. **Calcula scores** de qualidade
-7. **Ordena** da melhor para pior
-8. **Retorna top 15** imagens
-
-## 🚀 Deploy no Heroku
-
-### 1. Criar app
-
 ```bash
-heroku create seu-app-nome
+CHROME_BIN=/usr/bin/google-chrome
+CHROMEDRIVER_PATH=/usr/local/bin/chromedriver
 ```
 
-### 2. Configurar buildpacks
+### Buildpacks Necessários
+1. `heroku/python` - Runtime Python
+2. `heroku/google-chrome` - Chrome headless
+3. `heroku/chromedriver` - Driver do Chrome
+
+## 📊 Métricas de Qualidade
+
+A API calcula automaticamente scores de qualidade para cada imagem baseado em:
+- Tamanho real do arquivo
+- Dimensões HTML
+- Padrões específicos da loja
+- Extensão do arquivo
+- Texto alternativo
+
+## 🛡️ Tratamento de Erros
+
+- **Timeout**: Fallback automático para requests
+- **Chrome falha**: Fallback para BeautifulSoup
+- **Limpeza automática**: Recursos são liberados após cada uso
+- **Logs detalhados**: Rastreamento completo de cada operação
+
+## 🔄 Deploy
 
 ```bash
-heroku buildpacks:add heroku/google-chrome
-heroku buildpacks:add heroku/chromedriver
-heroku buildpacks:add heroku/python
-```
+# Fazer commit das mudanças
+git add .
+git commit -m "feat: implementa estratégia híbrida para Heroku"
 
-### 3. Fazer deploy
-
-```bash
+# Deploy para Heroku
 git push heroku main
 ```
 
-### 4. Verificar logs
+## 📈 Performance
 
-```bash
-heroku logs --tail
-```
+- **Selenium**: ~5-10 segundos (mais preciso)
+- **Requests**: ~2-5 segundos (mais rápido)
+- **Fallback automático**: Sempre funcional
+- **Memória otimizada**: Limpeza automática de recursos
 
-## 🔍 Endpoints
+## 🎯 Lojas Suportadas
 
-- **GET** `/` - Informações da API
-- **POST** `/extract-images` - Extrair imagens de produto
-- **GET** `/health` - Health check
+- Amazon
+- Mercado Livre
+- AliExpress
+- Americanas
+- Casas Bahia
+- Shopee
+- Shein
+- Kabum
+- Generic (outras lojas)
 
-## 📝 Exemplo de Uso com cURL
+## 🚨 Troubleshooting
 
-```bash
-curl -X POST "http://localhost:4000/extract-images" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "url": "https://www.amazon.com.br/Lanterna-Recarregavel/dp/B0DKWV28CZ"
-  }'
-```
+### Erro: "session not created: probably user data directory is already in use"
+- ✅ **RESOLVIDO**: Removido `--user-data-dir` das configurações
+- ✅ **RESOLVIDO**: Implementada limpeza automática de arquivos temporários
 
-## ⚠️ Limitações
+### Erro: "Chrome não inicia no Heroku"
+- ✅ **RESOLVIDO**: Configurações otimizadas para ambiente containerizado
+- ✅ **RESOLVIDO**: Fallback automático para requests + BeautifulSoup
 
-- Requer Chrome/Chromedriver no servidor
-- Pode ser bloqueado por algumas lojas
-- Tempo de resposta depende da velocidade da página
-- Algumas lojas podem ter proteções anti-bot
-
-## 🤝 Contribuição
-
-1. Fork o projeto
-2. Crie uma branch para sua feature
-3. Commit suas mudanças
-4. Push para a branch
-5. Abra um Pull Request
-
-## 📄 Licença
-
-Este projeto está sob a licença MIT.
+### Erro: "Timeout ao carregar página"
+- ✅ **RESOLVIDO**: Fallback automático para método mais rápido
+- ✅ **RESOLVIDO**: Múltiplas estratégias de extração
