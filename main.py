@@ -4,10 +4,11 @@ from typing import List, Optional
 import uvicorn
 import requests
 from image_extractor import extract_product_images
+from seo_extractor import extract_seo_meta_tags
 
 app = FastAPI(
     title="Extractor de Imagens de Produto",
-    description="API para extrair imagens de produtos de e-commerce",
+    description="API para extrair imagens de produtos de e-commerce e meta tags SEO (estilo WhatsApp)",
     version="1.0.0"
 )
 
@@ -40,12 +41,25 @@ class SearchImagesResponse(BaseModel):
     query: str
     total_found: int
 
+class SEOExtractRequest(BaseModel):
+    url: HttpUrl
+
+class SEOExtractResponse(BaseModel):
+    url: str
+    title: str
+    description: str
+    image: Optional[str]
+    source: str
+    status: str
+
 @app.get("/")
 async def root():
     return {
-        "message": "Extractor de Imagens de Produto",
-        "endpoint": "/extract-images",
-        "method": "POST",
+        "message": "Extractor de Imagens de Produto e Meta Tags SEO",
+        "endpoints": {
+            "extract_images": "/extract-images (POST)",
+            "extract_seo": "/extract-seo (POST) - MÉTODO DE TESTE"
+        },
         "version": "1.0.0"
     }
 
@@ -96,6 +110,38 @@ async def extract_images(request: ExtractRequest):
         raise HTTPException(
             status_code=500,
             detail=f"Erro ao extrair imagens: {str(e)}"
+        )
+
+@app.post("/extract-seo", response_model=SEOExtractResponse)
+async def extract_seo_meta_tags_endpoint(request: SEOExtractRequest):
+    """
+    MÉTODO DE TESTE: Extrai meta tags SEO como WhatsApp faz
+    Focado em sites chineses e outros que não funcionam com métodos tradicionais
+    
+    - **url**: URL da página para extrair meta tags
+    """
+    try:
+        result = extract_seo_meta_tags(str(request.url))
+        
+        if result['status'] != 'success':
+            raise HTTPException(
+                status_code=500,
+                detail=f"Erro ao extrair meta tags: {result.get('error', 'Erro desconhecido')}"
+            )
+        
+        return SEOExtractResponse(
+            url=result['url'],
+            title=result['title'],
+            description=result['description'],
+            image=result['image'],
+            source=result['source'],
+            status=result['status']
+        )
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erro ao extrair meta tags: {str(e)}"
         )
 
 @app.get("/health")
