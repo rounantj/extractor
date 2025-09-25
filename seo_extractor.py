@@ -5,8 +5,49 @@ Extrator de meta tags SEO estilo WhatsApp
 
 import requests
 from bs4 import BeautifulSoup
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse, parse_qs
 from datetime import datetime
+
+def get_proxies_for_url(url: str):
+    """Retorna proxies para requests quando a URL for do Mercado Livre"""
+    try:
+        url_lower = (url or '').lower()
+        is_ml = ('mercadolivre' in url_lower) or ('mlstatic.com' in url_lower)
+        if not is_ml:
+            return None
+
+        import os
+        host = os.getenv('PROXY_HOST', 'proxy.smartproxy.net')
+        port = int(os.getenv('PROXY_PORT', '3120'))
+        username = os.getenv('PROXY_USER', 'smart-rsrg25meix8s_area-BR_city-aracruz')
+        password = os.getenv('PROXY_PASS', 'OGf8dvp75MD79qUN')
+
+        proxy_url = f"http://{username}:{password}@{host}:{port}"
+        return {
+            'http': proxy_url,
+            'https': proxy_url
+        }
+    except Exception:
+        return None
+
+def normalize_mercado_livre_url(url: str) -> str:
+    """Se for página de verificação (gz/account-verification), extrai o parâmetro 'go'"""
+    try:
+        if not url:
+            return url
+        parsed = urlparse(url)
+        if 'mercadolivre' in (parsed.netloc or '').lower() and parsed.path.startswith('/gz/account-verification'):
+            qs = parse_qs(parsed.query or '')
+            go_vals = qs.get('go') or []
+            if go_vals:
+                from urllib.parse import unquote
+                real_url = unquote(go_vals[0])
+                if real_url:
+                    print("↪️ [SEO] Redirecionando para URL real do produto (go):", real_url)
+                    return real_url
+        return url
+    except Exception:
+        return url
 
 def extract_seo_meta_tags(url):
     """
@@ -36,7 +77,19 @@ def extract_seo_meta_tags(url):
             'Pragma': 'no-cache'
         }
         
-        response = requests.get(url, headers=headers, timeout=10, allow_redirects=True)
+        # Normalizar URL do Mercado Livre (evitar página de verificação)
+        url = normalize_mercado_livre_url(url)
+
+        proxies = get_proxies_for_url(url)
+        if proxies:
+            print("🛡️ [SEO] Usando proxy para Mercado Livre")
+        try:
+            response = requests.get(url, headers=headers, timeout=10, allow_redirects=True, proxies=proxies)
+        except requests.exceptions.SSLError:
+            print("♻️ [SEO] Re-tentando sem keep-alive por SSLError")
+            headers_retry = dict(headers)
+            headers_retry['Connection'] = 'close'
+            response = requests.get(url, headers=headers_retry, timeout=10, allow_redirects=True, proxies=proxies)
         response.raise_for_status()
         
         soup = BeautifulSoup(response.content, 'html.parser')

@@ -2,7 +2,7 @@ import time
 import json
 import re
 import os
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin, urlparse, parse_qs
 from datetime import datetime
 import random
 from selenium import webdriver
@@ -40,6 +40,46 @@ def detect_store_from_url(url):
         return 'Kabum'
     else:
         return 'Generic'
+
+def get_proxies_for_url(url, store_name=None):
+    """Retorna dicionário de proxies do requests quando for Mercado Livre"""
+    try:
+        url_lower = (url or '').lower()
+        is_ml = (store_name == 'Mercado Livre') or ('mercadolivre' in url_lower) or ('mlstatic.com' in url_lower)
+        if not is_ml:
+            return None
+
+        host = os.getenv('PROXY_HOST', 'proxy.smartproxy.net')
+        port = int(os.getenv('PROXY_PORT', '3120'))
+        username = os.getenv('PROXY_USER', 'smart-rsrg25meix8s_area-BR_city-aracruz')
+        password = os.getenv('PROXY_PASS', 'OGf8dvp75MD79qUN')
+
+        proxy_url = f"http://{username}:{password}@{host}:{port}"
+        return {
+            'http': proxy_url,
+            'https': proxy_url
+        }
+    except Exception:
+        return None
+
+def normalize_mercado_livre_url(url: str) -> str:
+    """Se for página de verificação (gz/account-verification), extrai o parâmetro 'go'"""
+    try:
+        if not url:
+            return url
+        parsed = urlparse(url)
+        if 'mercadolivre' in (parsed.netloc or '').lower() and parsed.path.startswith('/gz/account-verification'):
+            qs = parse_qs(parsed.query or '')
+            go_vals = qs.get('go') or []
+            if go_vals:
+                from urllib.parse import unquote
+                real_url = unquote(go_vals[0])
+                if real_url:
+                    print("↪️ Redirecionando para URL real do produto (go):", real_url)
+                    return real_url
+        return url
+    except Exception:
+        return url
 
 def setup_chrome_driver_heroku():
     """Configuração do Chrome baseada em soluções comprovadas do Heroku"""
@@ -119,17 +159,34 @@ def extract_images_with_requests(url, store_name):
     try:
         print(f"🔄 Extraindo com requests + BeautifulSoup para {store_name}")
         
+        # Normalizar URL do Mercado Livre (evitar página de verificação)
+        if store_name == 'Mercado Livre':
+            url = normalize_mercado_livre_url(url)
+
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
             'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8',
-            'Accept-Encoding': 'gzip, deflate, br',
+            # Alguns proxies/WAF têm problemas com brotli; evitar 'br' para ML
+            'Accept-Encoding': 'gzip, deflate' if store_name == 'Mercado Livre' else 'gzip, deflate, br',
             'DNT': '1',
             'Connection': 'keep-alive',
             'Upgrade-Insecure-Requests': '1',
         }
+        if store_name == 'Mercado Livre':
+            headers['Referer'] = 'https://www.mercadolivre.com.br/'
         
-        response = requests.get(url, headers=headers, timeout=30)
+        proxies = get_proxies_for_url(url, store_name)
+        if proxies:
+            print("🛡️ Usando proxy para Mercado Livre")
+        try:
+            response = requests.get(url, headers=headers, timeout=30, proxies=proxies, allow_redirects=True)
+        except requests.exceptions.SSLError:
+            # Tentar novamente com conexão fechada
+            print("♻️ Re-tentando sem keep-alive por SSLError")
+            headers_retry = dict(headers)
+            headers_retry['Connection'] = 'close'
+            response = requests.get(url, headers=headers_retry, timeout=30, proxies=proxies, allow_redirects=True)
         response.raise_for_status()
         
         soup = BeautifulSoup(response.content, 'html.parser')
@@ -400,7 +457,9 @@ def get_image_dimensions(url):
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         }
-        response = requests.head(url, headers=headers, timeout=10, allow_redirects=True)
+        # Tentar usar proxy quando for Mercado Livre
+        proxies = get_proxies_for_url(url)
+        response = requests.head(url, headers=headers, timeout=10, allow_redirects=True, proxies=proxies)
         
         if response.status_code == 200:
             content_length = response.headers.get('content-length', 0)
@@ -752,8 +811,13 @@ def extract_product_images(url, store_name=None):
                     'images': unique_images
                 }
         
-        # Estratégia 1: Tentar Selenium primeiro (mais robusto)
-        images = extract_images_with_selenium(url, store_name)
+        # Para Mercado Livre, priorizar requests com proxy em vez de Selenium
+        if store_name == 'Mercado Livre':
+            print("🎯 Mercado Livre detectado: usando requests + proxy")
+            images = extract_images_with_requests(url, store_name)
+        else:
+            # Estratégia 1: Tentar Selenium primeiro (mais robusto)
+            images = extract_images_with_selenium(url, store_name)
         
         # Estratégia 2: Se Selenium falhar, usar requests + BeautifulSoup (MAIS FLEXÍVEL)
         if not images:
