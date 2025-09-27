@@ -302,8 +302,14 @@ def is_main_product_image_flexible(src, element, store_name):
             'product', 'produto', 'casasbahia'
         ],
         'Shopee': [
+            'cf.shopee.com.br/',
             'shopee.com.br/arquivos/',
             'shopee.com.br/images/',
+            'deo.shopeemobile.com/',
+            'down-br.img.susercontent.com/',
+            'down-cvs-br.img.susercontent.com/',
+            'img.susercontent.com/',
+            'susercontent.com/',
             'product', 'produto', 'shopee'
         ],
         'Shein': [
