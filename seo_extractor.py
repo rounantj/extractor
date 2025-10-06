@@ -49,12 +49,122 @@ def normalize_mercado_livre_url(url: str) -> str:
     except Exception:
         return url
 
+def is_mercado_livre_url(url: str) -> bool:
+    """Verifica se a URL é do Mercado Livre"""
+    url_lower = (url or '').lower()
+    return ('mercadolivre' in url_lower) or ('mlstatic.com' in url_lower)
+
+def extract_mercado_livre_meta_tags(url):
+    """
+    Extração específica para Mercado Livre
+    - Usa headers sem Accept-Encoding para evitar problemas de compressão
+    - Usa proxy automaticamente
+    
+    Args:
+        url (str): URL da página do Mercado Livre
+    
+    Returns:
+        dict: Dicionário com meta tags extraídas
+    """
+    try:
+        print(f"🛒 [MERCADO LIVRE] Extraindo meta tags de: {url}")
+        
+        # Headers específicos para ML - SEM Accept-Encoding para evitar problemas de compressão
+        headers = {
+            'User-Agent': 'WhatsApp/2.23.24.81 (iPhone; iOS 17.1.2; Scale/3.00)',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+        }
+        
+        # Normalizar URL do Mercado Livre (evitar página de verificação)
+        url = normalize_mercado_livre_url(url)
+
+        proxies = get_proxies_for_url(url)
+        if proxies:
+            print("🛡️ [ML] Usando proxy para Mercado Livre")
+        
+        try:
+            response = requests.get(url, headers=headers, timeout=10, allow_redirects=True, proxies=proxies)
+        except requests.exceptions.SSLError:
+            print("♻️ [ML] Re-tentando sem keep-alive por SSLError")
+            headers_retry = dict(headers)
+            headers_retry['Connection'] = 'close'
+            response = requests.get(url, headers=headers_retry, timeout=10, allow_redirects=True, proxies=proxies)
+        response.raise_for_status()
+        
+        soup = BeautifulSoup(response.content, 'html.parser')
+        
+        # Extrair Open Graph tags (prioridade)
+        og_title = None
+        og_description = None
+        og_image = None
+        og_url = None
+        
+        for meta in soup.find_all('meta', property=lambda x: x and x.startswith('og:')):
+            prop = meta.get('property', '').replace('og:', '')
+            content = meta.get('content', '')
+            if content:
+                if prop == 'title':
+                    og_title = content
+                elif prop == 'description':
+                    og_description = content
+                elif prop == 'image':
+                    og_image = content
+                elif prop == 'url':
+                    og_url = content
+        
+        # Fallback para title tag
+        if not og_title:
+            title_tag = soup.find('title')
+            og_title = title_tag.get_text().strip() if title_tag else ''
+        
+        # Fallback para meta description
+        if not og_description:
+            desc_meta = soup.find('meta', attrs={'name': 'description'})
+            og_description = desc_meta.get('content', '') if desc_meta else ''
+        
+        # Converter URLs relativas para absolutas
+        if og_image and not og_image.startswith('http'):
+            if og_image.startswith('//'):
+                og_image = 'https:' + og_image
+            elif og_image.startswith('/'):
+                og_image = urljoin(url, og_image)
+            else:
+                og_image = urljoin(url, og_image)
+        
+        result = {
+            'url': url,
+            'title': og_title,
+            'description': og_description,
+            'image': og_image,
+            'source': 'mercado_livre',
+            'status': 'success'
+        }
+        
+        print(f"✅ [MERCADO LIVRE] Extraído:")
+        print(f"  📄 Título: {og_title[:80]}{'...' if og_title and len(og_title) > 80 else ''}")
+        print(f"  📝 Descrição: {og_description[:80] if og_description else 'N/A'}{'...' if og_description and len(og_description) > 80 else ''}")
+        print(f"  🖼️ Imagem: {og_image[:80] if og_image else 'N/A'}{'...' if og_image and len(og_image) > 80 else ''}")
+        
+        return result
+        
+    except Exception as e:
+        print(f"❌ [MERCADO LIVRE] Erro: {str(e)}")
+        return {
+            'url': url,
+            'status': 'error',
+            'error': str(e)
+        }
+
 def extract_seo_meta_tags(url):
     """
     MÉTODO WHATSAPP: Simula exatamente como WhatsApp faz link preview
     - Usa headers similares aos bots de link preview
     - Extrai meta tags Open Graph, Twitter Cards e tradicionais
     - Fallback para título e primeira imagem se não houver meta tags
+    - Tratamento especial para Mercado Livre
     
     Args:
         url (str): URL da página
@@ -63,6 +173,10 @@ def extract_seo_meta_tags(url):
         dict: Dicionário com meta tags extraídas (formato WhatsApp)
     """
     try:
+        # Se for Mercado Livre, usar extração específica
+        if is_mercado_livre_url(url):
+            return extract_mercado_livre_meta_tags(url)
+        
         print(f"🔍 [WHATSAPP STYLE] Extraindo meta tags de: {url}")
         
         # Headers similares aos usados por bots de link preview
