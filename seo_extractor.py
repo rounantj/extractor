@@ -54,6 +54,115 @@ def is_mercado_livre_url(url: str) -> bool:
     url_lower = (url or '').lower()
     return ('mercadolivre' in url_lower) or ('mlstatic.com' in url_lower)
 
+def is_youtube_url(url: str) -> bool:
+    """Verifica se a URL é do YouTube"""
+    url_lower = (url or '').lower()
+    return ('youtube.com' in url_lower) or ('youtu.be' in url_lower)
+
+def extract_youtube_video_id(url: str) -> str:
+    """Extrai o ID do vídeo do YouTube da URL"""
+    import re
+    patterns = [
+        r'(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/v\/|youtube\.com\/shorts\/)([^&\n?#]+)',
+        r'youtube\.com\/watch\?.*v=([^&\n?#]+)',
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, url)
+        if match:
+            return match.group(1)
+    return None
+
+def get_youtube_thumbnail(video_id: str) -> str:
+    """Retorna a URL da thumbnail do YouTube usando o padrão direto"""
+    # YouTube oferece thumbnails em várias resoluções:
+    # maxresdefault.jpg (1280x720), sddefault.jpg (640x480), 
+    # hqdefault.jpg (480x360), mqdefault.jpg (320x180), default.jpg (120x90)
+    return f"https://img.youtube.com/vi/{video_id}/maxresdefault.jpg"
+
+def extract_youtube_meta_tags(url: str):
+    """
+    Extração otimizada para YouTube
+    - Usa URL direta para thumbnail (sem precisar da API)
+    - Extrai título e descrição do HTML
+    """
+    try:
+        print(f"🎬 [YOUTUBE] Extraindo meta tags de: {url}")
+        
+        video_id = extract_youtube_video_id(url)
+        if not video_id:
+            print(f"⚠️ [YOUTUBE] Não foi possível extrair ID do vídeo")
+            return None
+        
+        print(f"📺 [YOUTUBE] Video ID: {video_id}")
+        
+        # Thumbnail direta do YouTube (sem precisar de API!)
+        thumbnail = get_youtube_thumbnail(video_id)
+        print(f"🖼️ [YOUTUBE] Thumbnail: {thumbnail}")
+        
+        # Buscar título e descrição do HTML
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8',
+        }
+        
+        response = requests.get(url, headers=headers, timeout=10, allow_redirects=True)
+        soup = BeautifulSoup(response.content, 'html.parser')
+        
+        # Extrair título
+        title = None
+        og_title = soup.find('meta', property='og:title')
+        if og_title:
+            title = og_title.get('content', '')
+        if not title:
+            title_tag = soup.find('title')
+            title = title_tag.get_text().strip() if title_tag else ''
+        # Remover " - YouTube" do final do título
+        if title and title.endswith(' - YouTube'):
+            title = title[:-10]
+        
+        # Extrair descrição
+        description = None
+        og_desc = soup.find('meta', property='og:description')
+        if og_desc:
+            description = og_desc.get('content', '')
+        if not description:
+            meta_desc = soup.find('meta', attrs={'name': 'description'})
+            description = meta_desc.get('content', '') if meta_desc else ''
+        
+        result = {
+            'url': url,
+            'title': title or '',
+            'description': description or '',
+            'image': thumbnail,  # Thumbnail SEMPRE vem da URL direta
+            'video_id': video_id,
+            'source': 'youtube_direct',
+            'status': 'success'
+        }
+        
+        print(f"✅ [YOUTUBE] Extraído:")
+        print(f"  📄 Título: {title[:80] if title else 'N/A'}{'...' if title and len(title) > 80 else ''}")
+        print(f"  📝 Descrição: {description[:80] if description else 'N/A'}{'...' if description and len(description) > 80 else ''}")
+        print(f"  🖼️ Imagem: {thumbnail}")
+        
+        return result
+        
+    except Exception as e:
+        print(f"❌ [YOUTUBE] Erro: {str(e)}")
+        # Mesmo com erro, tentar retornar a thumbnail
+        video_id = extract_youtube_video_id(url)
+        if video_id:
+            return {
+                'url': url,
+                'title': '',
+                'description': '',
+                'image': get_youtube_thumbnail(video_id),
+                'video_id': video_id,
+                'source': 'youtube_fallback',
+                'status': 'partial'
+            }
+        return None
+
 def extract_mercado_livre_meta_tags(url):
     """
     Extração específica para Mercado Livre
@@ -173,6 +282,10 @@ def extract_seo_meta_tags(url):
         dict: Dicionário com meta tags extraídas (formato WhatsApp)
     """
     try:
+        # Se for YouTube, usar extração específica (thumbnail direta)
+        if is_youtube_url(url):
+            return extract_youtube_meta_tags(url)
+        
         # Se for Mercado Livre, usar extração específica
         if is_mercado_livre_url(url):
             return extract_mercado_livre_meta_tags(url)
