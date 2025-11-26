@@ -1,10 +1,11 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, HttpUrl
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 import uvicorn
 import requests
 from image_extractor import extract_product_images
 from seo_extractor import extract_seo_meta_tags
+from product_extractor import extract_product, ExtractedProduct
 
 app = FastAPI(
     title="Extractor de Imagens de Produto",
@@ -51,6 +52,28 @@ class SEOExtractResponse(BaseModel):
     image: Optional[str]
     source: str
     status: str
+
+
+class ProductExtractRequest(BaseModel):
+    url: HttpUrl
+
+
+class ProductExtractResponse(BaseModel):
+    url: str
+    platform: str
+    title: Optional[str] = None
+    price: Optional[float] = None
+    original_price: Optional[float] = None
+    currency: str = "BRL"
+    description: Optional[str] = None
+    images: List[str] = []
+    seller: Optional[str] = None
+    rating: Optional[float] = None
+    review_count: Optional[int] = None
+    specifications: Dict[str, str] = {}
+    extraction_method: str = "selenium"
+    status: str = "success"
+    error: Optional[str] = None
 
 @app.get("/")
 async def root():
@@ -144,10 +167,61 @@ async def extract_seo_meta_tags_endpoint(request: SEOExtractRequest):
             detail=f"Erro ao extrair meta tags: {str(e)}"
         )
 
+@app.post("/extract-product", response_model=ProductExtractResponse)
+async def extract_product_endpoint(request: ProductExtractRequest):
+    """
+    Extrai dados COMPLETOS de um produto de e-commerce
+    
+    - **url**: URL do produto (Mercado Livre, Amazon, Shopee, etc.)
+    
+    Retorna todos os dados do produto: título, preço, imagens, descrição, etc.
+    Usa Selenium para scraping robusto quando necessário.
+    """
+    try:
+        print(f"\n📦 [API] Recebida requisição de extração de produto")
+        print(f"   URL: {request.url}")
+        
+        # Chamar extrator principal
+        result = extract_product(str(request.url))
+        
+        if result.status == "error":
+            raise HTTPException(
+                status_code=500,
+                detail=f"Erro na extração: {result.error}"
+            )
+        
+        return ProductExtractResponse(
+            url=result.url,
+            platform=result.platform,
+            title=result.title,
+            price=result.price,
+            original_price=result.original_price,
+            currency=result.currency,
+            description=result.description,
+            images=result.images or [],
+            seller=result.seller,
+            rating=result.rating,
+            review_count=result.review_count,
+            specifications=result.specifications or {},
+            extraction_method=result.extraction_method,
+            status=result.status,
+            error=result.error
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ [API] Erro ao extrair produto: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erro ao extrair produto: {str(e)}"
+        )
+
+
 @app.get("/health")
 async def health_check():
     """Endpoint de health check para Heroku"""
-    return {"status": "healthy", "service": "image-extractor"}
+    return {"status": "healthy", "service": "image-extractor", "version": "2.0"}
 
 if __name__ == "__main__":
     uvicorn.run(
