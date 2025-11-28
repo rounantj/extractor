@@ -510,3 +510,5 @@ if __name__ == "__main__":
         result = extract_product(url)
         print(json.dumps(result.to_dict(), indent=2, ensure_ascii=False))
 
+
+
