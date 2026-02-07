@@ -295,43 +295,44 @@ def extract_seo_meta_tags(url):
         if is_mercado_livre_url(url):
             return extract_mercado_livre_meta_tags(url)
         
-        # AliExpress entrega og:title/og:image só com User-Agent de browser (com WhatsApp retorna HTML vazio)
+        # AliExpress: requisição mínima como "curl simples" (só UA + Accept) para receber og:tags
         use_browser_ua = is_aliexpress_url(url)
         if use_browser_ua:
-            print(f"🛒 [ALIEXPRESS] Extraindo meta tags (User-Agent browser): {url}")
+            print(f"🛒 [ALIEXPRESS] Extraindo meta tags (request tipo curl): {url}")
         else:
             print(f"🔍 [WHATSAPP STYLE] Extraindo meta tags de: {url}")
         
-        # Headers: browser UA para AliExpress, senão WhatsApp (link preview)
-        user_agent = (
-            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-            if use_browser_ua
-            else 'WhatsApp/2.23.24.81 (iPhone; iOS 17.1.2; Scale/3.00)'
-        )
-        headers = {
-            'User-Agent': user_agent,
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'Connection': 'keep-alive',
-            'Upgrade-Insecure-Requests': '1',
-            'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache'
-        }
-        
-        # Normalizar URL do Mercado Livre (evitar página de verificação)
-        url = normalize_mercado_livre_url(url)
-
-        proxies = get_proxies_for_url(url)
-        if proxies:
-            print("🛡️ [SEO] Usando proxy para Mercado Livre")
-        try:
-            response = requests.get(url, headers=headers, timeout=10, allow_redirects=True, proxies=proxies)
-        except requests.exceptions.SSLError:
-            print("♻️ [SEO] Re-tentando sem keep-alive por SSLError")
-            headers_retry = dict(headers)
-            headers_retry['Connection'] = 'close'
-            response = requests.get(url, headers=headers_retry, timeout=10, allow_redirects=True, proxies=proxies)
+        # AliExpress: headers mínimos = mesmo que curl -L (só User-Agent browser + Accept)
+        if use_browser_ua:
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            }
+            proxies = None  # sem proxy para AliExpress
+            response = requests.get(url, headers=headers, timeout=15, allow_redirects=True)
+        else:
+            user_agent = 'WhatsApp/2.23.24.81 (iPhone; iOS 17.1.2; Scale/3.00)'
+            headers = {
+                'User-Agent': user_agent,
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1',
+                'Cache-Control': 'no-cache',
+                'Pragma': 'no-cache'
+            }
+            url = normalize_mercado_livre_url(url)
+            proxies = get_proxies_for_url(url)
+            if proxies:
+                print("🛡️ [SEO] Usando proxy para Mercado Livre")
+            try:
+                response = requests.get(url, headers=headers, timeout=10, allow_redirects=True, proxies=proxies)
+            except requests.exceptions.SSLError:
+                print("♻️ [SEO] Re-tentando sem keep-alive por SSLError")
+                headers_retry = dict(headers)
+                headers_retry['Connection'] = 'close'
+                response = requests.get(url, headers=headers_retry, timeout=10, allow_redirects=True, proxies=proxies)
         response.raise_for_status()
         
         soup = BeautifulSoup(response.content, 'html.parser')
