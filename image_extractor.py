@@ -41,11 +41,31 @@ def detect_store_from_url(url):
     else:
         return 'Generic'
 
+def _get_proxy_from_env():
+    """Retorna dict de proxy se PROXY_HOST ou PROXY_USER estiver configurado."""
+    host = os.getenv('PROXY_HOST')
+    username = os.getenv('PROXY_USER')
+    if not host and not username:
+        return None
+    try:
+        host = host or 'proxy.smartproxy.net'
+        port = int(os.getenv('PROXY_PORT', '3120'))
+        username = username or ''
+        password = os.getenv('PROXY_PASS', '')
+        proxy_url = f"http://{username}:{password}@{host}:{port}" if username else f"http://{host}:{port}"
+        return {'http': proxy_url, 'https': proxy_url}
+    except Exception:
+        return None
+
+
 def get_proxies_for_url(url, store_name=None):
-    """Retorna dicionário de proxies do requests quando for Mercado Livre"""
+    """Retorna dicionário de proxies para Mercado Livre (sempre) e AliExpress (quando PROXY_* configurado)."""
     try:
         url_lower = (url or '').lower()
         is_ml = (store_name == 'Mercado Livre') or ('mercadolivre' in url_lower) or ('mlstatic.com' in url_lower)
+        is_ae = (store_name == 'AliExpress') or ('aliexpress' in url_lower)
+        if is_ae:
+            return _get_proxy_from_env()  # AliExpress: só usa proxy quando env configurado (ex.: Heroku)
         if not is_ml:
             return None
 

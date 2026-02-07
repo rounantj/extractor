@@ -8,25 +8,45 @@ from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse, parse_qs
 from datetime import datetime
 
+def _get_proxy_from_env():
+    """Retorna dict de proxy se PROXY_HOST (ou PROXY_USER) estiver configurado."""
+    import os
+    host = os.getenv('PROXY_HOST')
+    username = os.getenv('PROXY_USER')
+    if not host and not username:
+        return None
+    try:
+        host = host or 'proxy.smartproxy.net'
+        port = int(os.getenv('PROXY_PORT', '3120'))
+        username = username or ''
+        password = os.getenv('PROXY_PASS', '')
+        proxy_url = f"http://{username}:{password}@{host}:{port}" if username else f"http://{host}:{port}"
+        return {'http': proxy_url, 'https': proxy_url}
+    except Exception:
+        return None
+
+
 def get_proxies_for_url(url: str):
-    """Retorna proxies para requests quando a URL for do Mercado Livre"""
+    """Retorna proxies para requests quando a URL for do Mercado Livre ou AliExpress (proxy configurado no env)."""
     try:
         url_lower = (url or '').lower()
         is_ml = ('mercadolivre' in url_lower) or ('mlstatic.com' in url_lower)
-        if not is_ml:
+        is_ae = 'aliexpress' in url_lower
+        if not is_ml and not is_ae:
             return None
 
-        import os
-        host = os.getenv('PROXY_HOST', 'proxy.smartproxy.net')
-        port = int(os.getenv('PROXY_PORT', '3120'))
-        username = os.getenv('PROXY_USER', 'smart-rsrg25meix8s_area-BR_city-aracruz')
-        password = os.getenv('PROXY_PASS', 'OGf8dvp75MD79qUN')
-
-        proxy_url = f"http://{username}:{password}@{host}:{port}"
-        return {
-            'http': proxy_url,
-            'https': proxy_url
-        }
+        proxy = _get_proxy_from_env()
+        if proxy and is_ae:
+            return proxy  # AliExpress: usa proxy quando configurado (ex.: Heroku com IP de datacenter)
+        if is_ml:
+            import os
+            host = os.getenv('PROXY_HOST', 'proxy.smartproxy.net')
+            port = int(os.getenv('PROXY_PORT', '3120'))
+            username = os.getenv('PROXY_USER', 'smart-rsrg25meix8s_area-BR_city-aracruz')
+            password = os.getenv('PROXY_PASS', 'OGf8dvp75MD79qUN')
+            proxy_url = f"http://{username}:{password}@{host}:{port}"
+            return {'http': proxy_url, 'https': proxy_url}
+        return None
     except Exception:
         return None
 
@@ -308,8 +328,10 @@ def extract_seo_meta_tags(url):
                 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
             }
-            proxies = None  # sem proxy para AliExpress
-            response = requests.get(url, headers=headers, timeout=15, allow_redirects=True)
+            proxies = get_proxies_for_url(url)
+            if proxies:
+                print("🛡️ [ALIEXPRESS] Usando proxy configurado (PROXY_*)")
+            response = requests.get(url, headers=headers, timeout=15, allow_redirects=True, proxies=proxies)
         else:
             user_agent = 'WhatsApp/2.23.24.81 (iPhone; iOS 17.1.2; Scale/3.00)'
             headers = {
