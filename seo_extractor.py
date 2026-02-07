@@ -54,6 +54,11 @@ def is_mercado_livre_url(url: str) -> bool:
     url_lower = (url or '').lower()
     return ('mercadolivre' in url_lower) or ('mlstatic.com' in url_lower)
 
+def is_aliexpress_url(url: str) -> bool:
+    """Verifica se a URL é do AliExpress. AliExpress entrega og:tags só com User-Agent de browser."""
+    url_lower = (url or '').lower()
+    return 'aliexpress' in url_lower
+
 def is_youtube_url(url: str) -> bool:
     """Verifica se a URL é do YouTube"""
     url_lower = (url or '').lower()
@@ -290,11 +295,21 @@ def extract_seo_meta_tags(url):
         if is_mercado_livre_url(url):
             return extract_mercado_livre_meta_tags(url)
         
-        print(f"🔍 [WHATSAPP STYLE] Extraindo meta tags de: {url}")
+        # AliExpress entrega og:title/og:image só com User-Agent de browser (com WhatsApp retorna HTML vazio)
+        use_browser_ua = is_aliexpress_url(url)
+        if use_browser_ua:
+            print(f"🛒 [ALIEXPRESS] Extraindo meta tags (User-Agent browser): {url}")
+        else:
+            print(f"🔍 [WHATSAPP STYLE] Extraindo meta tags de: {url}")
         
-        # Headers similares aos usados por bots de link preview
+        # Headers: browser UA para AliExpress, senão WhatsApp (link preview)
+        user_agent = (
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            if use_browser_ua
+            else 'WhatsApp/2.23.24.81 (iPhone; iOS 17.1.2; Scale/3.00)'
+        )
         headers = {
-            'User-Agent': 'WhatsApp/2.23.24.81 (iPhone; iOS 17.1.2; Scale/3.00)',
+            'User-Agent': user_agent,
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
             'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8',
             'Accept-Encoding': 'gzip, deflate, br',
@@ -407,7 +422,8 @@ def extract_seo_meta_tags(url):
             'status': 'success'
         }
         
-        print(f"✅ [WHATSAPP STYLE] Extraído:")
+        style_label = 'ALIEXPRESS' if use_browser_ua else 'WHATSAPP STYLE'
+        print(f"✅ [{style_label}] Extraído:")
         print(f"  📄 Título: {final_title[:80]}{'...' if len(final_title) > 80 else ''}")
         print(f"  📝 Descrição: {final_description[:80]}{'...' if len(final_description) > 80 else ''}")
         print(f"  🖼️ Imagem: {final_image[:80] if final_image else 'N/A'}{'...' if final_image and len(final_image) > 80 else ''}")
@@ -416,7 +432,7 @@ def extract_seo_meta_tags(url):
         return result
         
     except Exception as e:
-        print(f"❌ [WHATSAPP STYLE] Erro: {str(e)}")
+        print(f"❌ [SEO] Erro: {str(e)}")
         return {
             'url': url,
             'status': 'error',
