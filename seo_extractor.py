@@ -331,6 +331,8 @@ def extract_seo_meta_tags(url):
             proxies = get_proxies_for_url(url)
             if proxies:
                 print("🛡️ [ALIEXPRESS] Usando proxy configurado (PROXY_*)")
+            else:
+                print("⚠️ [ALIEXPRESS] Sem proxy (defina PROXY_HOST e PROXY_USER no Heroku para IP residencial)")
             response = requests.get(url, headers=headers, timeout=15, allow_redirects=True, proxies=proxies)
         else:
             user_agent = 'WhatsApp/2.23.24.81 (iPhone; iOS 17.1.2; Scale/3.00)'

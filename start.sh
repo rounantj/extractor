@@ -3,10 +3,21 @@
 # Script de inicialização otimizado para Heroku
 echo "🚀 Iniciando Image Extractor API..."
 
-# Configurar variáveis de ambiente para o Chrome (SOLUÇÃO COMPROVADA)
-export CHROME_BIN=/usr/bin/google-chrome
-export CHROMEDRIVER_PATH=/usr/local/bin/chromedriver
-export GOOGLE_CHROME_SHIM=/app/.apt/usr/bin/google-chrome
+# Detectar Chrome binary -- buildpack instala em /app/.apt/
+if [ -f "/app/.apt/usr/bin/google-chrome" ]; then
+    export GOOGLE_CHROME_SHIM=/app/.apt/usr/bin/google-chrome
+    export CHROME_BIN=/app/.apt/usr/bin/google-chrome
+elif [ -f "/usr/bin/google-chrome" ]; then
+    export GOOGLE_CHROME_SHIM=/usr/bin/google-chrome
+    export CHROME_BIN=/usr/bin/google-chrome
+fi
+
+# Detectar Chromedriver
+if [ -f "/app/.chromedriver/bin/chromedriver" ]; then
+    export CHROMEDRIVER_PATH=/app/.chromedriver/bin/chromedriver
+elif [ -f "/usr/local/bin/chromedriver" ]; then
+    export CHROMEDRIVER_PATH=/usr/local/bin/chromedriver
+fi
 
 # SOLUÇÃO COMPROVADA: Limpar diretórios temporários existentes
 echo "🧹 Limpando diretórios temporários existentes..."

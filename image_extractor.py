@@ -153,9 +153,17 @@ def setup_chrome_driver_heroku():
         chrome_options.add_argument('--allow-running-insecure-content')
         chrome_options.add_argument('--disable-features=VizDisplayCompositor')
         
+        chrome_bin = os.environ.get('GOOGLE_CHROME_SHIM') or os.environ.get('CHROME_BIN')
+        chromedriver_path = os.environ.get('CHROMEDRIVER_PATH', '/usr/local/bin/chromedriver')
+
+        if chrome_bin:
+            chrome_options.binary_location = chrome_bin
+            print(f"🔧 Chrome binary: {chrome_bin}")
+
         print(f"🔧 Configurando Chrome com diretório temporário: {temp_dir}")
-        
-        driver = webdriver.Chrome(options=chrome_options)
+
+        service = Service(executable_path=chromedriver_path) if os.path.exists(chromedriver_path) else None
+        driver = webdriver.Chrome(service=service, options=chrome_options) if service else webdriver.Chrome(options=chrome_options)
         driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
         
         print("✅ Chrome configurado com sucesso para Heroku")
